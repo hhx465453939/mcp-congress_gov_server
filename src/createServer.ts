@@ -12,7 +12,7 @@ import {
     // Variables // Needed for template callback signatures - Import from specific path
 } from "@modelcontextprotocol/sdk/types.js";
 // Import potentially internal types from specific paths based on mcp.d.ts
-import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+// NOTE: SDK internal typing varies by version; keep runtime-compatible typing.
 import { Variables } from "@modelcontextprotocol/sdk/shared/uriTemplate.js";
 import { ConfigurationManager } from "./config/ConfigurationManager.js";
 import { logger } from "./utils/index.js";
@@ -65,23 +65,23 @@ export function createServer(): McpServer {
     // Define read callbacks that accept and pass the service instance
     // Signatures need to match ReadResourceCallback / ReadResourceTemplateCallback
 
-    const readBillCallback = async (uri: URL, variables: Variables, extra: RequestHandlerExtra): Promise<ReadResourceResult> => {
+    const readBillCallback = async (uri: URL, variables: Variables, extra: any): Promise<ReadResourceResult> => {
         logger.debug("Handling readBillCallback", { uri: uri.toString(), variables, sessionId: extra.sessionId });
         // Pass the service instance to the handler
         return handleBillResource(uri.toString(), congressApiService);
     };
 
-    const readMemberCallback = async (uri: URL, variables: Variables, extra: RequestHandlerExtra): Promise<ReadResourceResult> => {
+    const readMemberCallback = async (uri: URL, variables: Variables, extra: any): Promise<ReadResourceResult> => {
         logger.debug("Handling readMemberCallback", { uri: uri.toString(), variables, sessionId: extra.sessionId });
         return handleMemberResource(uri.toString(), congressApiService);
     };
 
-    const readCongressCallback = async (uri: URL, variables: Variables, extra: RequestHandlerExtra): Promise<ReadResourceResult> => {
+    const readCongressCallback = async (uri: URL, variables: Variables, extra: any): Promise<ReadResourceResult> => {
         logger.debug("Handling readCongressCallback", { uri: uri.toString(), variables, sessionId: extra.sessionId });
         return handleCongressResource(uri.toString(), congressApiService);
     };
 
-    const readCommitteeCallback = async (uri: URL, variables: Variables, extra: RequestHandlerExtra): Promise<ReadResourceResult> => {
+    const readCommitteeCallback = async (uri: URL, variables: Variables, extra: any): Promise<ReadResourceResult> => {
         logger.debug("Handling readCommitteeCallback", { uri: uri.toString(), variables, sessionId: extra.sessionId });
         // Note: Committee handler might need congress from variables if URI template changes
         return handleCommitteeResource(uri.toString(), congressApiService);
@@ -89,13 +89,13 @@ export function createServer(): McpServer {
 
     // Add callbacks for other specific resources (Amendment, Nomination, etc.) if implemented
 
-    const readInfoOverviewCallback = async (uri: URL, extra: RequestHandlerExtra): Promise<ReadResourceResult> => {
+    const readInfoOverviewCallback = async (uri: URL, extra: any): Promise<ReadResourceResult> => {
         logger.debug("Handling readInfoOverviewCallback", { uri: uri.toString(), sessionId: extra.sessionId });
         // Static handlers don't need the service instance
         return handleInfoOverviewResource(uri.toString());
     };
 
-    const readInfoCurrentCongressCallback = async (uri: URL, extra: RequestHandlerExtra): Promise<ReadResourceResult> => {
+    const readInfoCurrentCongressCallback = async (uri: URL, extra: any): Promise<ReadResourceResult> => {
         logger.debug("Handling readInfoCurrentCongressCallback", { uri: uri.toString(), sessionId: extra.sessionId });
         return handleInfoCurrentCongressResource(uri.toString());
     };
@@ -105,28 +105,28 @@ export function createServer(): McpServer {
     server.resource(
         "Bill Information",
         new ResourceTemplate("congress-gov://bill/{congress}/{billType}/{billNumber}", { list: undefined }),
-        { description: "Information about a specific bill by Congress, type, and number", mimeType: "application/json" },
+        { description: "Bill details. Tip: use congress_search first to confirm identifiers; use congress_getSubResource for actions/text/cosponsors/etc.", mimeType: "application/json" },
         readBillCallback
     );
 
     server.resource(
         "Member Information",
         new ResourceTemplate("congress-gov://member/{memberId}", { list: undefined }),
-        { description: "Information about a specific member of Congress by ID", mimeType: "application/json" },
+        { description: "Member details. Tip: use congress_search to find the correct memberId; then fetch sponsored/cosponsored legislation via congress_getSubResource.", mimeType: "application/json" },
         readMemberCallback
     );
 
     server.resource(
         "Congress Information",
         new ResourceTemplate("congress-gov://congress/{congress}", { list: undefined }),
-        { description: "Information about a specific Congress by number", mimeType: "application/json" },
+        { description: "Congress session details (e.g., 118).", mimeType: "application/json" },
         readCongressCallback
     );
 
     server.resource(
         "Committee Information",
         new ResourceTemplate("congress-gov://committee/{congress}/{chamber}/{committeeCode}", { list: undefined }),
-        { description: "Information about a specific committee", mimeType: "application/json" },
+        { description: "Committee details. Tip: use congress_search to discover committee identifiers; then use congress_getSubResource for related bills/reports/nominations.", mimeType: "application/json" },
         readCommitteeCallback
     );
 

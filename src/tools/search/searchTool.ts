@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpError, ErrorCode, CallToolResult } from "@modelcontextprotocol/sdk/types.js"; // Ensure ErrorCode is imported
-import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js"; // For handler signature
+// NOTE: The SDK's RequestHandlerExtra typing varies by version; keep runtime-compatible typing.
 import { z } from "zod";
 import { TOOL_NAME, TOOL_DESCRIPTION, TOOL_PARAMS, CongressSearchParams } from "./searchParams.js";
 // Import the service class, not the singleton instance, if we instantiate it here or pass it in
 import { CongressApiService } from "../../services/CongressApiService.js";
-import { ApiError, NotFoundError, RateLimitError, ValidationError, InvalidParameterError } from "../../utils/errors.js"; // Import custom errors
+import { ApiError, NotFoundError, RateLimitError, ValidationError, InvalidParameterError, ApiDataGovError } from "../../utils/errors.js"; // Import custom errors
 import { logger } from "../../utils/index.js";
 import { SearchParams } from "../../types/index.js"; // Import the SearchParams type
 
@@ -17,7 +17,7 @@ import { SearchParams } from "../../types/index.js"; // Import the SearchParams 
 export const searchTool = (server: McpServer, congressApiService: CongressApiService): void => { // Inject service instance
 
     // Type assertion for args based on Zod schema
-    const processSearchRequest = async (args: CongressSearchParams, extra: RequestHandlerExtra): Promise<CallToolResult> => {
+    const processSearchRequest = async (args: CongressSearchParams, extra: any): Promise<CallToolResult> => {
         logger.debug(`Processing ${TOOL_NAME} request`, { args, sessionId: extra.sessionId });
         try {
             // Directly map validated args to the SearchParams type expected by the service
@@ -33,10 +33,14 @@ export const searchTool = (server: McpServer, congressApiService: CongressApiSer
             const result = await congressApiService.searchCollection(args.collection, searchParams);
 
             // Format the successful output for MCP
+            const rateLimit = congressApiService.getRateLimitSnapshot();
             return {
                 content: [{
                     type: "text" as const,
                     text: JSON.stringify(result, null, 2) // Pretty print JSON
+                }, {
+                    type: "text" as const,
+                    text: `Rate limit snapshot (upstream/api.data.gov headers if present):\n${JSON.stringify(rateLimit, null, 2)}`
                 }]
             };
 
@@ -59,6 +63,13 @@ export const searchTool = (server: McpServer, congressApiService: CongressApiSer
                 // Or potentially a custom error code if the spec allowed, but InternalError is safest.
                 throw new McpError(ErrorCode.InternalError, `Rate limit exceeded: ${error.message}`);
             }
+            if (error instanceof ApiDataGovError) {
+                throw new McpError(
+                    ErrorCode.InternalError,
+                    `api.data.gov gateway error (${error.gatewayCode}): ${error.message}`,
+                    { statusCode: error.statusCode, gatewayCode: error.gatewayCode }
+                );
+            }
             if (error instanceof ApiError) {
                 throw new McpError(ErrorCode.InternalError, `API error during search: ${error.message}`, { statusCode: error.statusCode });
             }
@@ -73,8 +84,8 @@ export const searchTool = (server: McpServer, congressApiService: CongressApiSer
     server.tool(
         TOOL_NAME,
         TOOL_DESCRIPTION,
-        TOOL_PARAMS, // Pass the Zod schema directly
-        processSearchRequest as any // Cast to any to satisfy SDK handler type if needed, ensure signature matches
+        TOOL_PARAMS as any, // SDK typing differs across versions
+        processSearchRequest as any
     );
 
     logger.info(`Tool registered`, { toolName: TOOL_NAME });

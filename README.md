@@ -1,4 +1,4 @@
-﻿﻿![CongressMCPServer](assets/logo.svg)
+![CongressMCPServer](assets/logo.svg)
 
 # Congress.gov API MCP Server
 
@@ -42,6 +42,44 @@ This server acts as a bridge, allowing MCP clients (like AI assistants or develo
     ```
 
     (Get a key from [https://api.data.gov/signup/](https://api.data.gov/signup/))
+
+    **Optional (api.data.gov gateway compatibility):**
+
+    - `CONGRESS_GOV_API_KEY_MODE`: How the key is sent to api.data.gov. Supported: `query` (default), `header`, `basic`.
+      - `query`: sends `api_key=...` query parameter
+      - `header`: sends `X-Api-Key: ...` header (customizable)
+      - `basic`: HTTP Basic Auth username = api key (empty password)
+    - `CONGRESS_GOV_API_KEY_HEADER_NAME`: Header name when mode is `header` (default `X-Api-Key`)
+
+    The upstream gateway behavior is documented in the official manual: [`api.data.gov Developer Manual`](https://api.data.gov/docs/developer-manual/).
+
+    **Local deployment option: `config.local.json`**
+
+    If you prefer a JSON config file (useful for local deployment and service managers), create `config.local.json` in the project root. It is optional and is loaded **before** environment variables (env vars win).
+
+    You can also set a custom path via `CONGRESS_GOV_CONFIG_PATH`.
+
+```json
+{
+  "congressGov": {
+    "apiKey": "YOUR_API_KEY_HERE",
+    "apiKeyMode": "query",
+    "apiKeyHeaderName": "X-Api-Key",
+    "baseUrl": "https://api.congress.gov/v3",
+    "timeout": 30000
+  },
+  "rateLimit": {
+    "maxRequests": 5000,
+    "perHours": 1,
+    "enableBackoff": true
+  },
+  "exampleService": {
+    "greeting": "Hello",
+    "enableDetailedLogs": false
+  }
+}
+```
+
 3. **Build the Server:**
 
     ```bash
@@ -157,6 +195,10 @@ Many common tasks require a **mandatory two-step process** using both tools:
     * **!!! GUARANTEED ERROR WARNING !!!** You **MUST** use a `subResource` string that is **STRICTLY VALID** for the `parentUri` type (e.g., `'sponsored-legislation'` for members, `'actions'` for bills). Providing an invalid combination **WILL** cause an error. Check the tool description for valid combinations.
 
 **Following this two-step process is ESSENTIAL for reliably getting related information.**
+
+**Rate limits (api.data.gov):**
+- The upstream gateway may return `X-RateLimit-Limit` / `X-RateLimit-Remaining` headers. Tool outputs will include a “rate limit snapshot” block after the JSON result when present.
+- Standard gateway error codes may appear (e.g., `API_KEY_INVALID`, `API_KEY_MISSING`, `OVER_RATE_LIMIT`). This server maps these into structured errors.
 
 **Tool Examples:**
 

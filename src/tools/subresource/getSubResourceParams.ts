@@ -2,7 +2,15 @@ import { z } from 'zod';
 
 export const TOOL_NAME = "congress_getSubResource";
 
-export const TOOL_DESCRIPTION = `Fetches related data lists (sub-resources like 'actions', 'cosponsors', 'text') for a specific parent Congress.gov entity. **!!! ABSOLUTE PREREQUISITE !!!** You **MUST** provide the exact, complete MCP URI of the parent entity in 'parentUri' (e.g., 'congress-gov://member/K000393'). This URI **MUST** be obtained from a prior 'congress_search' or known identifier; guessing will **FAIL**. You **MUST** also provide a 'subResource' name that is **STRICTLY VALID** for the parent entity's type (check the list below!). **!!! PROVIDING AN INVALID 'parentUri' OR 'subResource' COMBINATION WILL GUARANTEE AN ERROR !!!**`;
+export const TOOL_DESCRIPTION = `Fetches related data lists (sub-resources like 'actions', 'cosponsors', 'text') for a specific parent Congress.gov entity.
+
+**Absolute prerequisite (do not guess):**
+- 'parentUri' must be an exact MCP URI of the parent entity (usually obtained from **congress_search**).
+- 'subResource' must be valid for the parent entity type (see list below).
+
+**Rate limits & api.data.gov gateway:**
+- If you hit upstream rate limits you may see HTTP 429 and/or gateway code **OVER_RATE_LIMIT**.
+- Invalid/disabled/unverified keys may surface as gateway codes like API_KEY_INVALID / API_KEY_DISABLED / API_KEY_UNVERIFIED (this server will map these to structured errors).`;
 
 // Define allowed sub-resource types based on API documentation, grouped by parent type
 const SubResourceTypeEnum = z.enum([

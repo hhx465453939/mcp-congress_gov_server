@@ -1,11 +1,11 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { McpError, ErrorCode, CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import { RequestHandlerExtra } from "@modelcontextprotocol/sdk/shared/protocol.js";
+// NOTE: The SDK's RequestHandlerExtra typing varies by version; keep runtime-compatible typing.
 import { z } from "zod";
 import { TOOL_NAME, TOOL_DESCRIPTION, TOOL_PARAMS, CongressGetSubResourceParams } from "./getSubResourceParams.js";
 // Import the service class, not the singleton instance
 import { CongressApiService } from "../../services/CongressApiService.js";
-import { ApiError, NotFoundError, RateLimitError, ValidationError, ResourceError, InvalidParameterError } from "../../utils/errors.js"; // Added InvalidParameterError
+import { ApiError, NotFoundError, RateLimitError, ValidationError, ResourceError, InvalidParameterError, ApiDataGovError } from "../../utils/errors.js"; // Added InvalidParameterError
 import { logger } from "../../utils/index.js";
 import { PaginationParams } from "../../types/index.js"; // Import PaginationParams
 
@@ -22,7 +22,7 @@ import { PaginationParams } from "../../types/index.js"; // Import PaginationPar
  */
 export const getSubResourceTool = (server: McpServer, congressApiService: CongressApiService): void => { // Inject service instance
 
-    const processGetSubResourceRequest = async (args: CongressGetSubResourceParams, extra: RequestHandlerExtra): Promise<CallToolResult> => {
+    const processGetSubResourceRequest = async (args: CongressGetSubResourceParams, extra: any): Promise<CallToolResult> => {
         logger.debug(`Processing ${TOOL_NAME} request`, { args, sessionId: extra.sessionId });
         try {
             // 1. Prepare pagination parameters
@@ -39,10 +39,14 @@ export const getSubResourceTool = (server: McpServer, congressApiService: Congre
             );
 
             // 3. Format the successful output
+            const rateLimit = congressApiService.getRateLimitSnapshot();
             return {
                 content: [{
                     type: "text" as const,
                     text: JSON.stringify(result, null, 2)
+                }, {
+                    type: "text" as const,
+                    text: `Rate limit snapshot (upstream/api.data.gov headers if present):\n${JSON.stringify(rateLimit, null, 2)}`
                 }]
             };
 
@@ -64,6 +68,13 @@ export const getSubResourceTool = (server: McpServer, congressApiService: Congre
                 // Use InternalError for rate limits, as the server itself isn't unavailable
                 throw new McpError(ErrorCode.InternalError, `Rate limit exceeded: ${error.message}`);
             }
+            if (error instanceof ApiDataGovError) {
+                throw new McpError(
+                    ErrorCode.InternalError,
+                    `api.data.gov gateway error (${error.gatewayCode}): ${error.message}`,
+                    { statusCode: error.statusCode, gatewayCode: error.gatewayCode }
+                );
+            }
             if (error instanceof ApiError) {
                 throw new McpError(ErrorCode.InternalError, `API error fetching sub-resource: ${error.message}`, { statusCode: error.statusCode });
             }
@@ -78,8 +89,8 @@ export const getSubResourceTool = (server: McpServer, congressApiService: Congre
     server.tool(
         TOOL_NAME,
         TOOL_DESCRIPTION,
-        TOOL_PARAMS,
-        processGetSubResourceRequest as any // Cast if needed
+        TOOL_PARAMS as any,
+        processGetSubResourceRequest as any
     );
 
     logger.info(`Tool registered`, { toolName: TOOL_NAME });

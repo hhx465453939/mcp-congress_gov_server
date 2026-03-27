@@ -2,7 +2,18 @@ import { z } from 'zod';
 
 export const TOOL_NAME = "congress_search";
 
-export const TOOL_DESCRIPTION = `Searches or lists items within a specified Congress.gov collection (e.g., 'bill', 'member'). **!!! CRITICAL WORKFLOW STEP !!!** This tool is **REQUIRED** as the **FIRST STEP** to locate specific entities and retrieve their unique identifiers (like memberId, bill number/type/congress). These identifiers are **ESSENTIAL** inputs for other tools like 'congress_getSubResource'. **FAILURE TO USE THIS FIRST WILL LIKELY CAUSE SUBSEQUENT OPERATIONS TO FAIL.** Returns a list; be prepared to handle multiple results and extract the specific ID needed. **WARNING:** Filtering by 'congress' using the 'filters' parameter is **NOT SUPPORTED** by the underlying API for general collection searches (e.g., /v3/bill) and will be ignored; congress-specific filtering requires using specific API paths not directly targeted by this tool.`;
+export const TOOL_DESCRIPTION = `Searches or lists items within a specified Congress.gov collection (e.g., 'bill', 'member').
+
+**Best-practice workflow (for maximum retrieval quality):**
+1) Use **congress_search** to find the correct entity and extract its identifiers (e.g., memberId, or bill congress/type/number).
+2) Use **congress_getSubResource** with a *real* parentUri (not guessed) to fetch related lists (actions, text, cosponsors, etc.).
+
+**Rate limits & gateway behavior (api.data.gov):**
+- The upstream gateway may return **X-RateLimit-Limit** / **X-RateLimit-Remaining** headers (this server will surface a snapshot after calls).
+- Standard gateway error codes may appear in responses: API_KEY_MISSING / API_KEY_INVALID / API_KEY_DISABLED / API_KEY_UNAUTHORIZED / API_KEY_UNVERIFIED / OVER_RATE_LIMIT.
+
+**Important limitation:**
+Filtering by 'congress' using the 'filters' parameter is **NOT SUPPORTED** by the underlying API for general collection lists (e.g., /v3/bill) and will be ignored; congress-specific filtering typically requires a different path shape.`;
 
 // Define allowed collections based on API documentation
 const SearchableCollectionEnum = z.enum([

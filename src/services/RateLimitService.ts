@@ -8,6 +8,9 @@ import { logger } from '../utils/logger.js';
 export class RateLimitService {
     private requestTimes: number[] = [];
     private readonly config: Required<RateLimitConfig>;
+    private lastUpstreamLimit?: number;
+    private lastUpstreamRemaining?: number;
+    private lastUpstreamSeenAt?: number;
 
     constructor(config?: Partial<RateLimitConfig>) {
         const configManager = ConfigurationManager.getInstance();
@@ -15,6 +18,36 @@ export class RateLimitService {
         const defaultConfig = configManager.getRateLimitConfig();
         this.config = { ...defaultConfig, ...config };
         logger.info(`RateLimitService initialized`, { config: this.config }); // Log config object
+    }
+
+    /**
+     * Update cached upstream api.data.gov rate limit headers.
+     * Axios normalizes header keys to lowercase in Node.
+     */
+    public updateFromHeaders(headers: Record<string, unknown> | undefined): void {
+        if (!headers) return;
+        const limitRaw = headers['x-ratelimit-limit'] ?? headers['X-RateLimit-Limit'];
+        const remainingRaw = headers['x-ratelimit-remaining'] ?? headers['X-RateLimit-Remaining'];
+        const limit = typeof limitRaw === 'string' ? parseInt(limitRaw, 10) : typeof limitRaw === 'number' ? limitRaw : undefined;
+        const remaining = typeof remainingRaw === 'string' ? parseInt(remainingRaw, 10) : typeof remainingRaw === 'number' ? remainingRaw : undefined;
+
+        if (typeof limit === 'number' && !Number.isNaN(limit)) {
+            this.lastUpstreamLimit = limit;
+        }
+        if (typeof remaining === 'number' && !Number.isNaN(remaining)) {
+            this.lastUpstreamRemaining = remaining;
+        }
+        if (this.lastUpstreamLimit !== undefined || this.lastUpstreamRemaining !== undefined) {
+            this.lastUpstreamSeenAt = Date.now();
+        }
+    }
+
+    public getUpstreamSnapshot(): { limit?: number; remaining?: number; seenAt?: number } {
+        return {
+            limit: this.lastUpstreamLimit,
+            remaining: this.lastUpstreamRemaining,
+            seenAt: this.lastUpstreamSeenAt,
+        };
     }
 
     /**

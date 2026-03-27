@@ -1,4 +1,4 @@
-﻿/**
+/**
 * Base custom error class for application-specific errors.
 */
 export class BaseError extends Error {
@@ -117,6 +117,21 @@ export class RateLimitError extends ApiError {
         // Call the ApiError constructor
         super(message, 429, undefined); // Pass undefined for details
         this.name = 'RateLimitError'; // Override name
+    }
+}
+
+/**
+ * Error for standardized api.data.gov (API Umbrella) gateway errors.
+ * These include API_KEY_* and OVER_RATE_LIMIT codes described in the developer manual.
+ */
+export class ApiDataGovError extends ApiError {
+    public readonly gatewayCode: string;
+
+    constructor(message: string, statusCode: number, gatewayCode: string, details?: unknown) {
+        super(message, statusCode, details);
+        this.name = 'ApiDataGovError';
+        this.gatewayCode = gatewayCode;
+        this.code = gatewayCode; // Override BaseError code to match gateway code for easier routing/logging
     }
 }
 

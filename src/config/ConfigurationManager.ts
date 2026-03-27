@@ -1,5 +1,7 @@
-﻿// Import config types for services as they are added
-import { ExampleServiceConfig, RateLimitConfig, CongressGovConfig } from '../types/index.js';
+// Import config types for services as they are added
+import { readFileSync } from "node:fs";
+import { ExampleServiceConfig, RateLimitConfig, CongressGovConfig } from "../types/index.js";
+import { logger } from "../utils/logger.js";
 
 // Define the structure for all configurations managed
 interface ManagedConfigs {
@@ -39,6 +41,8 @@ export class ConfigurationManager {
                 apiKey: '', // Loaded from env var
                 baseUrl: 'https://api.congress.gov/v3', // Corrected Base URL
                 timeout: 30000, // 30 seconds
+                apiKeyMode: 'query',
+                apiKeyHeaderName: 'X-Api-Key',
             },
             // Initialize other service configs with defaults:
             // yourService: {
@@ -47,7 +51,9 @@ export class ConfigurationManager {
             // },
         };
 
-        // Optional: Load overrides from environment variables or config files here
+        // Optional: Load overrides from a local config file, then env vars.
+        // Precedence: defaults < config file < environment variables
+        this.loadConfigFileOverrides();
         this.loadEnvironmentOverrides();
     }
 
@@ -66,7 +72,9 @@ export class ConfigurationManager {
                 }
             } else {
                 // Basic busy wait if locked (consider a more robust async lock if high contention is expected)
-                while (ConfigurationManager.instanceLock) { }
+                while (ConfigurationManager.instanceLock) {
+                    // busy wait
+                }
                 // Re-check instance after wait
                 if (!ConfigurationManager.instance) {
                     // This path is less likely but handles edge cases if lock logic needs refinement
@@ -123,6 +131,37 @@ export class ConfigurationManager {
      * Example method to load configuration overrides from environment variables.
      * Call this in the constructor.
      */
+    private loadConfigFileOverrides(): void {
+        const configPath = process.env.CONGRESS_GOV_CONFIG_PATH || "./config.local.json";
+        try {
+            const raw = readFileSync(configPath, "utf8");
+            const parsed = JSON.parse(raw) as Partial<ManagedConfigs> & {
+                congressGov?: Partial<CongressGovConfig>;
+                rateLimit?: Partial<RateLimitConfig>;
+                exampleService?: Partial<ExampleServiceConfig>;
+            };
+
+            if (parsed.exampleService) {
+                this.config.exampleService = { ...this.config.exampleService, ...parsed.exampleService };
+            }
+            if (parsed.rateLimit) {
+                this.config.rateLimit = { ...this.config.rateLimit, ...parsed.rateLimit };
+            }
+            if (parsed.congressGov) {
+                this.config.congressGov = { ...this.config.congressGov, ...parsed.congressGov };
+            }
+
+            logger.info("Loaded config file overrides", { configPath });
+        } catch (error: any) {
+            // File is optional; ignore missing files. Warn on malformed JSON.
+            if (error?.code === "ENOENT") return;
+            logger.warn("Failed to load config file overrides", {
+                configPath,
+                message: error instanceof Error ? error.message : String(error),
+            });
+        }
+    }
+
     private loadEnvironmentOverrides(): void {
         // Example for ExampleService
         if (process.env.EXAMPLE_GREETING) {
@@ -151,6 +190,16 @@ export class ConfigurationManager {
 
         // --- Congress.gov API Overrides ---
         this.loadCongressGovApiKey(); // Load API key separately for clarity
+
+        if (process.env.CONGRESS_GOV_API_KEY_MODE) {
+            const mode = process.env.CONGRESS_GOV_API_KEY_MODE.toLowerCase();
+            if (mode === 'query' || mode === 'header' || mode === 'basic') {
+                this.config.congressGov.apiKeyMode = mode;
+            }
+        }
+        if (process.env.CONGRESS_GOV_API_KEY_HEADER_NAME) {
+            this.config.congressGov.apiKeyHeaderName = process.env.CONGRESS_GOV_API_KEY_HEADER_NAME;
+        }
 
         // Allow overriding the corrected base URL via env var if needed
         if (process.env.CONGRESS_GOV_API_URL) {

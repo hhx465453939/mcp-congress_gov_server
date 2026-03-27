@@ -8,7 +8,7 @@ import {
     PaginationParams, SearchParams // Define these types
     // Add other specific param types as needed: NominationResourceParams, TreatyResourceParams, etc.
 } from '../types/index.js'; // Import needed param types
-import { ApiError, RateLimitError, NotFoundError, InvalidParameterError } from '../utils/errors.js'; // Import custom errors
+import { ApiError, RateLimitError, NotFoundError, InvalidParameterError, ApiDataGovError } from '../utils/errors.js'; // Import custom errors
 import { RateLimitService } from './RateLimitService.js'; // Import RateLimitService
 
 // Define supported query parameters for LIST endpoints (RFC-003)
@@ -66,18 +66,34 @@ export class CongressApiService {
 
         this.rateLimitService = rateLimitService ?? new RateLimitService(); // Use injected or create new
 
+        const apiKeyMode = this.config.apiKeyMode ?? 'query';
+        const apiKeyHeaderName = this.config.apiKeyHeaderName || 'X-Api-Key';
+
+        const defaultParams: Record<string, string> = { format: 'json' };
+        const defaultHeaders: Record<string, string> = {};
+        const defaultAuth: { username: string; password: string } | undefined =
+            apiKeyMode === 'basic' ? { username: this.config.apiKey, password: '' } : undefined;
+
+        if (apiKeyMode === 'query') {
+            defaultParams['api_key'] = this.config.apiKey;
+        } else if (apiKeyMode === 'header') {
+            defaultHeaders[apiKeyHeaderName] = this.config.apiKey;
+        }
+
         this.axiosInstance = axios.create({
             baseURL: this.config.baseUrl,
-            params: {
-                api_key: this.config.apiKey,
-                format: 'json', // Default to JSON format
-            },
+            params: defaultParams,
+            headers: defaultHeaders,
+            auth: defaultAuth,
             timeout: this.config.timeout,
         });
 
         // Simplified interceptor: just log, throw custom errors from executeRequest
         this.axiosInstance.interceptors.response.use(
-            (response: AxiosResponse) => response,
+            (response: AxiosResponse) => {
+                this.rateLimitService.updateFromHeaders(response.headers as any);
+                return response;
+            },
             (error: AxiosError) => {
                 // Log the raw error here if needed, but executeRequest handles specific error throwing
                 const redactedUrl = error.config?.url?.replace(this.config.apiKey, '[REDACTED]');
@@ -86,6 +102,7 @@ export class CongressApiService {
                     status: error.response?.status,
                     // data: error.response?.data, // Avoid logging potentially large/sensitive data by default
                 });
+                this.rateLimitService.updateFromHeaders(error.response?.headers as any);
                 // Let executeRequest handle throwing specific custom errors based on response
                 return Promise.reject(error);
             }
@@ -143,6 +160,7 @@ export class CongressApiService {
                 const status = error.response?.status;
                 const responseData = error.response?.data as any;
                 const errorMessage = responseData?.message || responseData?.error?.message || error.message || 'Unknown API error';
+                const gatewayCode = responseData?.error?.code;
 
                 if (status === 404) {
                     throw new NotFoundError(`Resource not found at API endpoint: ${endpoint}`);
@@ -152,7 +170,26 @@ export class CongressApiService {
                     throw new NotFoundError(`Resource not found at API endpoint (reported as 500): ${endpoint}`);
                 }
                 if (status === 429) {
+                    // If the api.data.gov gateway returns a standard code, preserve it.
+                    if (typeof gatewayCode === 'string') {
+                        throw new ApiDataGovError(
+                            `api.data.gov rate limit hit (${gatewayCode})`,
+                            429,
+                            gatewayCode,
+                            responseData
+                        );
+                    }
                     throw new RateLimitError(`Congress.gov API rate limit hit (status 429)`);
+                }
+
+                // api.data.gov gateway standardized errors (usually 400/403/429)
+                if (typeof gatewayCode === 'string') {
+                    throw new ApiDataGovError(
+                        `api.data.gov gateway error (${gatewayCode}): ${errorMessage}`,
+                        status ?? 0,
+                        gatewayCode,
+                        responseData
+                    );
                 }
                 // Throw generic ApiError for other client/server errors from API
                 // Provide a default status code (e.g., 0 or 500) if status is undefined
@@ -161,6 +198,16 @@ export class CongressApiService {
             // Rethrow unexpected errors as generic ApiError
             throw new ApiError(`Congress API request failed: ${error instanceof Error ? error.message : 'Unknown error'}`, 0, error);
         }
+    }
+
+    public getRateLimitSnapshot(): { upstream: ReturnType<RateLimitService['getUpstreamSnapshot']>; local: { remainingEstimate: number; resetAt: number } } {
+        return {
+            upstream: this.rateLimitService.getUpstreamSnapshot(),
+            local: {
+                remainingEstimate: this.rateLimitService.getRemainingRequests(),
+                resetAt: this.rateLimitService.getResetTime(),
+            },
+        };
     }
 
 

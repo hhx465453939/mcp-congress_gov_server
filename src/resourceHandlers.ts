@@ -1,6 +1,6 @@
 import { McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { CongressApiService } from "./services/CongressApiService.js"; // Import class
-import { ResourceNotFoundError, ResourceError, NotFoundError, ApiError, RateLimitError, InvalidParameterError } from "./utils/errors.js"; // Added InvalidParameterError
+import { ResourceNotFoundError, ResourceError, NotFoundError, ApiError, RateLimitError, InvalidParameterError, ApiDataGovError } from "./utils/errors.js"; // Added InvalidParameterError
 import { logger } from "./utils/logger.js";
 // Import all needed param types
 import {
@@ -11,12 +11,20 @@ import {
 /**
  * Formats successful API data into the MCP ResourceContents structure (array).
  */
-function formatSuccessResponse(uri: string, data: any): any[] { // Use any[] return type
-    return [{ // Return the array directly
+function formatSuccessResponse(uri: string, data: any, service?: CongressApiService): any[] { // Use any[] return type
+    const contents: any[] = [{
         uri: uri,
         mimeType: "application/json",
-        text: JSON.stringify(data, null, 2)
+        text: JSON.stringify(data, null, 2),
     }];
+    if (service) {
+        contents.push({
+            uri: `${uri}#mcp-hints`,
+            mimeType: "text/plain",
+            text: `Hints:\n- Prefer tools for search + related lists (congress_search -> congress_getSubResource)\n- Rate limit snapshot:\n${JSON.stringify(service.getRateLimitSnapshot(), null, 2)}`,
+        });
+    }
+    return contents;
 }
 
 /**
@@ -32,6 +40,12 @@ function handleResourceError(uri: string, error: unknown): never {
     } else if (error instanceof RateLimitError) {
         // Rate limit error from API service - use InternalError as planned
         throw new McpError(ErrorCode.InternalError, `Rate limit exceeded for ${uri}. Details: ${error.message}`);
+    } else if (error instanceof ApiDataGovError) {
+        throw new McpError(
+            ErrorCode.InternalError,
+            `api.data.gov gateway error (${error.gatewayCode}) for ${uri}: ${error.message}`,
+            { statusCode: error.statusCode, gatewayCode: error.gatewayCode, details: error.details }
+        );
     } else if (error instanceof InvalidParameterError) {
         // Invalid params detected during URI parsing or service call
         throw new McpError(ErrorCode.InvalidParams, `Invalid parameters for resource ${uri}: ${error.message}`);
@@ -70,7 +84,7 @@ export async function handleBillResource(uri: string, congressApiService: Congre
     try {
         // Call specific service method
         const billData = await congressApiService.getBillDetails(params);
-        return { contents: formatSuccessResponse(uri, billData) };
+        return { contents: formatSuccessResponse(uri, billData, congressApiService) };
     } catch (error) { handleResourceError(uri, error); }
 }
 
@@ -83,7 +97,7 @@ export async function handleMemberResource(uri: string, congressApiService: Cong
     try {
         // Call specific service method
         const memberData = await congressApiService.getMemberDetails(params);
-        return { contents: formatSuccessResponse(uri, memberData) };
+        return { contents: formatSuccessResponse(uri, memberData, congressApiService) };
     } catch (error) { handleResourceError(uri, error); }
 }
 
@@ -96,7 +110,7 @@ export async function handleCongressResource(uri: string, congressApiService: Co
     try {
         // Call specific service method
         const congressData = await congressApiService.getCongressDetails(params);
-        return { contents: formatSuccessResponse(uri, congressData) };
+        return { contents: formatSuccessResponse(uri, congressData, congressApiService) };
     } catch (error) { handleResourceError(uri, error); }
 }
 
@@ -122,7 +136,7 @@ export async function handleCommitteeResource(uri: string, congressApiService: C
     try {
         // Call specific service method
         const committeeData = await congressApiService.getCommitteeDetails(params);
-        return { contents: formatSuccessResponse(uri, committeeData) };
+        return { contents: formatSuccessResponse(uri, committeeData, congressApiService) };
     } catch (error) { handleResourceError(uri, error); }
 }
 
