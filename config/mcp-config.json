@@ -1,0 +1,26 @@
+{
+  "_comment": "Congress.gov MCP Server configuration template (stdio). Copy into your calling project's MCP config.",
+  "mcpServers": {
+    "congress-gov-mcp-server": {
+      "disabled": false,
+      "timeout": 300,
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "./dist/server.js"
+      ],
+      "cwd": "E:/Development/mcp-congress_gov_server",
+      "env": {
+        "CONGRESS_GOV_API_KEY": "YOUR_API_KEY_HERE",
+        "CONGRESS_GOV_API_KEY_MODE": "query",
+        "CONGRESS_GOV_API_KEY_HEADER_NAME": "X-Api-Key",
+        "CONGRESS_GOV_API_URL": "https://api.congress.gov/v3",
+        "CONGRESS_GOV_API_TIMEOUT": "30000",
+        "RATE_LIMIT_MAX_REQUESTS": "5000",
+        "RATE_LIMIT_PER_HOURS": "1",
+        "ENABLE_BACKOFF": "true"
+      }
+    }
+  }
+}
+

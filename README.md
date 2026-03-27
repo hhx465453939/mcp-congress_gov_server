@@ -57,7 +57,9 @@ This server acts as a bridge, allowing MCP clients (like AI assistants or develo
 
     If you prefer a JSON config file (useful for local deployment and service managers), create `config.local.json` in the project root. It is optional and is loaded **before** environment variables (env vars win).
 
-    You can also set a custom path via `CONGRESS_GOV_CONFIG_PATH`.
+    - **Default path**: `./config.local.json` (project root)
+    - **Custom path**: set `CONGRESS_GOV_CONFIG_PATH` (example PowerShell: `$env:CONGRESS_GOV_CONFIG_PATH="E:\path\to\config.local.json"`)
+    - **Important**: If you are using this server from a *different* local project/agent, you must set the **calling project's MCP config** to point at this repo's executable entry (e.g. `E:\Development\mcp-congress_gov_server\dist\server.js`) or a startup script.
 
 ```json
 {
@@ -99,6 +101,56 @@ Alternatively, run in development mode using `npm run dev` (uses `ts-node` and `
 ## Usage with MCP Client
 
 Connect your MCP client to the running server (e.g., via stdio if running locally).
+
+### MCP client config (import this server from another project)
+
+If you want another local project/agent to call this MCP server without running it manually, configure it as an MCP server (stdio) and point to this repo's executable entry.
+
+- Template file: `config/mcp-config.json`
+- Key fields:
+  - `command`: typically `node`
+  - `args`: `["./dist/server.js"]` (or a startup script)
+  - `cwd`: **absolute path** to this repo so the relative `args` works
+  - `env`: inject `CONGRESS_GOV_API_KEY` and related settings
+
+Example:
+
+```json
+{
+  "mcpServers": {
+    "congress-gov-mcp-server": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["./dist/server.js"],
+      "cwd": "path/to/mcp-congress_gov_server",
+      "env": {
+        "CONGRESS_GOV_API_KEY": "YOUR_API_KEY_HERE"
+      }
+    }
+  }
+}
+```
+
+Cherry Studio example (JSON import). Prefer forward slashes in Windows paths:
+
+```json
+{
+  "mcpServers": {
+    "congress-gov-mcp-server": {
+      "name": "congress-gov-mcp-server",
+      "type": "stdio",
+      "isActive": true,
+      "command": "node",
+      "args": ["path/to/mcp-congress_gov_server/dist/server.js"],
+      "env": {
+        "CONGRESS_GOV_API_KEY": "YOUR_API_KEY_HERE",
+        "CONGRESS_GOV_API_KEY_MODE": "query",
+        "CONGRESS_GOV_API_KEY_HEADER_NAME": "X-Api-Key"
+      }
+    }
+  }
+}
+```
 
 ### Accessing Resources
 

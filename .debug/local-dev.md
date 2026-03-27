@@ -9,6 +9,7 @@
 - **`.env`**：只放敏感信息（API key），参考 `.env.example`
 - **`config.local.json`**：本地部署/服务管理器友好（已被 `.gitignore` 忽略）
 - 自定义 JSON 路径：`CONGRESS_GOV_CONFIG_PATH=./path/to/config.json`
+- **调用方项目导入**：在“调用方项目”的 MCP 配置里写本仓库入口（`command=node` + `args=["./dist/server.js"]` + `cwd=本仓库绝对路径`）；模板见 `config/mcp-config.json`
 
 ## api.data.gov / Congress.gov 关键行为
 - API key 传递方式（可配置）：
